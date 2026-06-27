@@ -7,4 +7,5 @@ It also have Website through which You can control the air conditioner And it is
 
 So basically I have used sinric pro To The microcontroller to the Internet. 
 
+I've used AI To search about how can Connect my ESP82 With Internet and how can I use it with Google home.
 
