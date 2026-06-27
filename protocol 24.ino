@@ -1,81 +1,117 @@
-#include <WiFi.h>
-#include "SinricPro.h"
-#include "SinricProAirConditioner.h"
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <SinricPro.h>
+#include <SinricProWindowAC.h>
+#include <IRremoteESP8266.h>
+#include <IRrecv.h>
+#include <IRutils.h>
+#include <ir_Voltas.h>
 
-#define WIFI_SSID         "YOUR_WIFI_NAME"
-#define WIFI_PASS         "YOUR_WIFI_PASSWORD"
-#define APP_KEY           "YOUR_SINRIC_APP_KEY"
-#define APP_SECRET        "YOUR_SINRIC_APP_SECRET"
+#define WIFI_SSID         "Jio_O_1108_4G"
+#define WIFI_PASS         "12345678"
+#define APP_KEY           "84bddb98-6666-4f5f-9073-00882ab8e60f"
+#define APP_SECRET        "84dafc93-32d4-488e-8598-d2f803707531-5d343841-eb8a-488a-867c-acc89409dfaa"
 #define AC_DEVICE_ID      "6a347e666ba33a80b97c6e83"
 
-unsigned long ecoTimerStart = 0;       
-bool ecoTimerActive = false;           
+const uint16_t kRecvPin = 14;
+const uint16_t kIrLed = 4;
+
+IRrecv irrecv(kRecvPin, 1024, 50, true);
+decode_results results;
+IRVoltas ac(kIrLed);
+
+unsigned long ecoTimerStart = 0;
+bool ecoTimerActive = false;
 const unsigned long ONE_HOUR = 3600000;
 
-const int IR_SEND_PIN = 2;
-
-bool globalPowerState = false;
-float globalTemperature = 24.0;
-
 bool onPowerState(const String &deviceId, bool &state) {
-  Serial.printf("Power state changed to %s\n", state ? "on" : "off");
-  globalPowerState = state;
-  
+  Serial.printf("Google says turn AC %s\n", state ? "on" : "off");
   if (state) {
-
+    ac.on();
   } else {
-
+    ac.off();
+    ecoTimerActive = false;
   }
-  return true; 
+  ac.send();
+  return true;
 }
 
 bool onTargetTemperature(const String &deviceId, float &temperature) {
-  Serial.printf("Target temperature set to: %.1f\n", temperature);
-  globalTemperature = temperature;
+  int targetTemp = (int)temperature;
+  Serial.printf("Google set temp to %d\n", targetTemp);
 
-  if (temperature < 24.0) {
-    Serial.println("Warning: Temp below 24. 1-Hour Eco Timer started.");
-    ecoTimerActive = true;       
-    ecoTimerStart = millis();    
+  if (targetTemp < 24) {
+    if (!ecoTimerActive) {
+      Serial.println("below 24, starting eco timer");
+      ecoTimerActive = true;
+    }
+    ecoTimerStart = millis();
   } else {
-    ecoTimerActive = false;      
-    Serial.println("Eco mode bypassed. Timer cancelled.");
+    Serial.println("temp is fine, timer cleared");
+    ecoTimerActive = false;
   }
 
+  ac.setTemp(targetTemp);
+  ac.on();
+  ac.send();
   return true;
 }
 
 void setup() {
   Serial.begin(115200);
+  irrecv.enableIRIn();
 
-  Serial.print("Connecting to Wi-Fi");
+  ac.begin();
+  ac.on();
+  ac.setFan(kVoltasFanAuto);
+  ac.setMode(kVoltasCool);
+  ac.setTemp(24);
+
+  Serial.print("connecting to wifi");
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-  WiFi.setSleep(false);
   while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
     delay(500);
+    Serial.print(".");
   }
-  Serial.println("\nConnected!");
+  Serial.println("\nconnected");
 
-  SinricProAirConditioner &myAc = SinricPro[AC_DEVICE_ID];
-  myAc.onPowerState(onPowerState);
-  myAc.onTargetTemperature(onTargetTemperature);
+  SinricProWindowAC &myAC = SinricPro[AC_DEVICE_ID];
+  myAC.onPowerState(onPowerState);
+  myAC.onTargetTemperature(onTargetTemperature);
 
-  SinricPro.onConnected([](){ Serial.println("Connected to Sinric Pro Cloud."); });
-  SinricPro.onDisconnected([](){ Serial.println("Disconnected from Cloud."); });
+  SinricPro.onConnected([](){ Serial.println("connected to sinric"); });
   SinricPro.begin(APP_KEY, APP_SECRET);
 }
 
 void loop() {
   SinricPro.handle();
 
-  if (ecoTimerActive && (millis() - ecoTimerStart >= ONE_HOUR)) {
-    Serial.println("1 hour elapsed! Reverting AC to 24°C Eco-Mode.");
-    
-    ecoTimerActive = false; 
-    globalTemperature = 24.0;
+  if (irrecv.decode(&results)) {
+    if (results.decode_type == VOLTAS) {
+      int capturedTemp = results.state[3];
+      Serial.print("caught remote signal, temp ");
+      Serial.println(capturedTemp);
 
-    SinricProAirConditioner &myAc = SinricPro[AC_DEVICE_ID];
-    myAc.sendTargetTemperatureEvent(24.0); 
+      if (capturedTemp < 24) {
+        if (!ecoTimerActive) ecoTimerActive = true;
+        ecoTimerStart = millis();
+      } else {
+        ecoTimerActive = false;
+      }
+    }
+    irrecv.resume();
+  }
+
+  if (ecoTimerActive && (millis() - ecoTimerStart >= ONE_HOUR)) {
+    Serial.println("hour's up, forcing AC back to 24");
+
+    ecoTimerActive = false;
+
+    ac.setTemp(24);
+    ac.on();
+    ac.send();
+
+    SinricProWindowAC &myAC = SinricPro[AC_DEVICE_ID];
+    myAC.sendTargetTemperatureEvent(24.0);
   }
 }
