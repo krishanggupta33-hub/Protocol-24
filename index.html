@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kuro Genesis Web</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            background-color: #0a0a0c;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-image: radial-gradient(circle at center, #111 0%, #000 100%);
+        }
+
+        .panel {
+            background: rgba(20, 20, 25, 0.8);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 15px;
+            padding: 40px;
+            width: 380px;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            margin: 0 0 5px 0;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+
+        .sub {
+            font-size: 10px;
+            color: #00f3ff;
+            letter-spacing: 5px;
+            margin-bottom: 25px;
+            text-transform: uppercase;
+        }
+
+        #status {
+            font-size: 12px;
+            letter-spacing: 2px;
+            color: #888;
+            margin-bottom: 25px;
+        }
+
+        .temp-stepper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 0 20px;
+        }
+
+        .step-btn {
+            background: transparent;
+            color: #00f3ff;
+            border: none;
+            font-size: 32px;
+            cursor: pointer;
+            transition: 0.2s;
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
+        }
+
+        .step-btn:hover {
+            color: #fff;
+            text-shadow: 0 0 20px #fff;
+            transform: scale(1.2);
+        }
+
+        #temp {
+            font-size: 64px;
+            font-weight: 700;
+            color: #00f3ff;
+            text-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+            margin: 0;
+            width: 150px; 
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        button {
+            background: transparent;
+            color: #00f3ff;
+            font-family: 'Orbitron', sans-serif;
+            border: 1px solid #00f3ff;
+            padding: 15px 5px;
+            font-size: 13px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            background: #00f3ff;
+            color: #000;
+            box-shadow: 0 0 15px #00f3ff;
+        }
+
+        .btn-full {
+            grid-column: span 2;
+        }
+
+        .pwr-btn {
+            grid-column: span 2;
+            border-color: #ff3366;
+            color: #ff3366;
+            margin-top: 10px;
+            font-weight: 700;
+            letter-spacing: 2px;
+        }
+
+        .pwr-btn:hover {
+            background: #ff3366;
+            color: #fff;
+            box-shadow: 0 0 15px #ff3366;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h1>KURO GENESIS</h1>
+        <div class="sub">Climate Control Matrix</div>
+
+        <div id="status">STATUS: <span style="color: #ff3366;">STANDBY</span></div>
+
+        <div class="temp-stepper">
+            <button class="step-btn" onclick="adjustTemp(-1)">&#9664;</button> 
+            <div id="temp">24°C</div>
+            <button class="step-btn" onclick="adjustTemp(1)">&#9654;</button>  
+        </div>
+
+        <div class="controls">
+            <button id="btn-mode" onclick="cycleMode()">MODE: COOL</button>
+            <button id="btn-fan" onclick="cycleFan()">FAN: AUTO</button>
+            <button id="btn-swing" class="btn-full" onclick="toggleSwing()">SWING: OFF</button>
+            <button class="pwr-btn" onclick="togglePower()">POWER OVERRIDE</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CREDENTIALS ---
+        const API_KEY = "9e0cff4a-59ac-4453-854f-38f7ccfee06a"; 
+        const DEV_ID = "6a347e666ba33a80b97c6e83"; 
+
+        // --- HARDWARE STATE MEMORY ---
+        let acIsOn = false;
+        let currentTemp = 24;
+        let isTransmitting = false; // Security Lock
+        
+        let modes = ["COOL", "DRY", "FAN", "AUTO"];
+        let modeIdx = 0;
+        
+        let fans = ["AUTO", "LOW", "MEDIUM", "HIGH"];
+        let fanIdx = 0;
+        
+        let swingIsOn = false;
+
+        // UI Elements
+        const statusText = document.getElementById("status");
+        const tempText = document.getElementById("temp");
+        const btnMode = document.getElementById("btn-mode");
+        const btnFan = document.getElementById("btn-fan");
+        const btnSwing = document.getElementById("btn-swing");
+
+        console.log("Kuro Genesis Advanced Matrix Online.");
+
+        // --- CLOUD BRIDGE (NETLIFY DEPLOYMENT ROUTE) ---
+        async function fireCommand(actionName, payloadVal) {
+            if (isTransmitting) {
+                console.log("Cooldown active. Ignoring secondary click.");
+                return; 
+            }
+
+            isTransmitting = true;
+            statusText.innerHTML = "STATUS: <span style='color: orange;'>TRANSMITTING...</span>";
+
+            try {
+                // Notice the URL is now just /sinric/...
+                // This triggers the Netlify backend router to bypass CORS
+                let res = await fetch(`/sinric/devices/${DEV_ID}/action`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-SINRIC-API-KEY': API_KEY 
+                    },
+                    body: JSON.stringify({
+                        type: "request",
+                        action: actionName,
+                        value: JSON.stringify(payloadVal)
+                    })
+                });
+
+                if(res.ok) {
+                    statusText.innerHTML = "STATUS: <span style='color: #00f3ff;'>SYNCED</span>";
+                } else {
+                    statusText.innerHTML = "STATUS: <span style='color: #ff3366;'>API REJECTED</span>";
+                }
+            } catch (err) {
+                statusText.innerHTML = "STATUS: <span style='color: #ff3366;'>OFFLINE</span>";
+            }
+
+            // Unlock the system after 1.5 seconds
+            setTimeout(() => {
+                isTransmitting = false;
+                if(statusText.innerText.includes("SYNCED")) {
+                    statusText.innerHTML = "STATUS: <span style='color: #888;'>ONLINE & READY</span>";
+                }
+            }, 1500);
+        }
+
+        // --- MATRIX LOGIC FUNCTIONS ---
+        
+        function togglePower() {
+            acIsOn = !acIsOn;
+            fireCommand("setPowerState", { state: acIsOn ? "On" : "Off" });
+            
+            if (!acIsOn) {
+                tempText.innerText = "OFF";
+                statusText.innerHTML = "STATUS: <span style='color: #888;'>STANDBY</span>";
+            } else {
+                tempText.innerText = currentTemp + "°C";
+            }
+        }
+
+        function adjustTemp(direction) {
+            acIsOn = true; 
+            currentTemp += direction;
+            
+            if(currentTemp < 16) currentTemp = 16;
+            if(currentTemp > 30) currentTemp = 30;
+            
+            tempText.innerText = currentTemp + "°C";
+            fireCommand("targetTemperature", { temperature: currentTemp });
+        }
+
+        function cycleMode() {
+            acIsOn = true;
+            modeIdx = (modeIdx + 1) % modes.length;
+            btnMode.innerText = "MODE: " + modes[modeIdx];
+            fireCommand("setMode", { mode: modes[modeIdx] });
+        }
+
+        function cycleFan() {
+            acIsOn = true;
+            fanIdx = (fanIdx + 1) % fans.length;
+            btnFan.innerText = "FAN: " + fans[fanIdx];
+            fireCommand("setRangeValue", { rangeValue: fans[fanIdx] }); 
+        }
+
+        function toggleSwing() {
+            acIsOn = true;
+            swingIsOn = !swingIsOn;
+            btnSwing.innerText = "SWING: " + (swingIsOn ? "ON" : "OFF");
+            fireCommand("setToggleState", { state: swingIsOn ? "On" : "Off" });
+        }
+    </script>
+</body>
+</html>
