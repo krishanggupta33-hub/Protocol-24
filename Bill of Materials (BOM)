@@ -1,0 +1,12 @@
+Bill of Materials (BOM)
+
+| Component | Quantity | Purpose |
+
+| **NodeMCU ESP8266 (v3)** | 1 | The main microcontroller and Wi-Fi brain. |
+| **HW-477 IR Receiver Module** | 1 | Captures the physical remote's infrared hex codes. |
+| **IR Transmitter LED (940nm)** | 1 | Blasts the spoofed IR codes to the AC unit. |
+| **NPN Transistor (BC547)** | 1 | Amplifies current to the IR LED to ensure the signal reaches the AC receiver. |
+| **Resistors (330Ω & 1kΩ)** | 2 | Current limiting to protect the LED (330Ω) and the transistor base (1kΩ). |
+| **Perfboard & Wiring** | 1 | Used for the final miniaturized, stealth soldered installation inside the AC unit. |
+
+
