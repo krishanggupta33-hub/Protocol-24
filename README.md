@@ -9,3 +9,18 @@ So basically I have used sinric pro To The microcontroller to the Internet.
 
 I've used AI To search about how can Connect my ESP82 With Internet and how can I use it with Google home.
 
+
+Wiring diagram
+
+1. IR Receiver (HW-477)
+
+* VCC (+) Pin ➜ 3.3V on ESP8266
+* GND (-) Pin➜ GND on ESP8266
+* DATA (S) Pin ➜ D5  on ESP8266
+
+2. IR Transmitter 
+
+* ESP8266 D2  ➜ 1kΩ Resistor➜ Transistor Base (B)
+* ESP8266 VIN (5V) ➜ IR LED Anode (+)
+* IR LED Cathode (-) ➜ Transistor Collector (C)
+* Transistor Emitter (E) ➜ GND on ESP8266
